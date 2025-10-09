@@ -39,7 +39,6 @@ async function main() {
         .option('--no-git', 'Do not initialize a git repository', { default: false })
         .action(async (projectName, options) => {
             try {
-                // 1) Resolve project name (prompt if not provided)
                 if (!projectName) {
                     const res = await prompts(
                         {
@@ -61,7 +60,6 @@ async function main() {
 
                 const targetDir = path.resolve(process.cwd(), projectName);
 
-                // 2) If target directory exists, confirm overwrite when not empty
                 if (await fs.pathExists(targetDir)) {
                     const files = await fs.readdir(targetDir);
                     if (files.length) {
@@ -89,16 +87,13 @@ async function main() {
 
                 console.log(`\nCreating project ${projectName}...\n`);
 
-                // 3) Prepare repo spec for degit
                 const templatePath = (options.template || 'template').replace(/^\/+/, '');
                 let repoBase = (options.repo || '').trim().replace(/\/+$/, '');
-                // Normalize: if user passed github:owner/repo, also support a fallback without the prefix
                 const buildSpec = (base) =>
                     templatePath === '.' ? base : `${base}/${templatePath}`;
 
                 let repoSpec = buildSpec(repoBase);
 
-                // 4) Clone with degit (with fallback if github: prefix causes trouble)
                 async function tryClone(spec) {
                     const emitter = degit(spec, { cache: false, force: true, verbose: false });
                     await emitter.clone(targetDir);
@@ -107,7 +102,6 @@ async function main() {
                 try {
                     await tryClone(repoSpec);
                 } catch (err) {
-                    // Retry without github: if present
                     if (repoBase.startsWith('github:')) {
                         const fallbackBase = repoBase.replace(/^github:/, '');
                         const fallbackSpec = buildSpec(fallbackBase);
@@ -121,7 +115,6 @@ async function main() {
                     }
                 }
 
-                // 5) Replace placeholders (e.g., __PROJECT_NAME__, __PROJECT_SLUG__)
                 const pkgPath = path.join(targetDir, 'package.json');
                 if (await fs.pathExists(pkgPath)) {
                     let pkg = await fs.readFile(pkgPath, 'utf8');
@@ -131,7 +124,6 @@ async function main() {
                     await fs.writeFile(pkgPath, pkg, 'utf8');
                 }
 
-                // 6) Optionally install dependencies (npm only)
                 if (options.install) {
                     const { execa } = await import('execa');
                     console.log('Installing dependencies with npm...');
@@ -146,7 +138,6 @@ async function main() {
                     console.log('Skipping dependency install.');
                 }
 
-                // 7) Initialize git unless disabled
                 if (!options.noGit) {
                     try {
                         const { execa } = await import('execa');
