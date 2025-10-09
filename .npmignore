@@ -1,0 +1,5 @@
+node_modules
+*.log
+.vscode
+.github
+convexity-n-layer-template/   # if you have the template repo copied in the same repo, exclude it

@@ -5,6 +5,15 @@
   "bin": {
     "create-convexity-n-layer-template": "./bin/index.js"
   },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wrappedcbdc/create-convexity-n-layer-template.git"
+  },
   "keywords": ["create", "scaffold", "template", "convexity"],
   "license": "MIT",
   "dependencies": {
@@ -16,5 +25,8 @@
   },
   "engines": {
     "node": ">=16"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

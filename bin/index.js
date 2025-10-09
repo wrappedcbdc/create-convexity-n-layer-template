@@ -5,7 +5,6 @@ const fs = require('fs-extra');
 const degit = require('degit');
 const prompts = require('prompts');
 const cac = require('cac');
-const execa = require('execa');
 
 /**
  * Slugify a project name for package.json name (simple)
@@ -16,21 +15,9 @@ function slugify(name) {
         .trim()
         .toLowerCase()
         .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9-_\.]/g, '-')
+        .replace(/[^a-z0-9-_.]/g, '-')
         .replace(/-+/g, '-')
         .replace(/(^-|-$)/g, '');
-}
-
-async function detectInstaller() {
-    try {
-        await execa('pnpm', ['--version']);
-        return 'pnpm';
-    } catch {}
-    try {
-        await execa('yarn', ['--version']);
-        return 'yarn';
-    } catch {}
-    return 'npm';
 }
 
 async function main() {
@@ -41,23 +28,15 @@ async function main() {
         .option(
             '--template <template>',
             'Template subdirectory or path within the repo (use "." for repo root)',
-            {
-                default: 'template',
-            }
+            { default: 'template' }
         )
         .option(
             '--repo <repo>',
-            'Repository to use (degit spec). Examples: github:wrappedcbdc/convexity-n-layer-template OR wrappedcbdc/convexity-n-layer-template',
-            {
-                default: 'github:wrappedcbdc/convexity-n-layer-template',
-            }
+            'Repository to use (degit spec). Examples: wrappedcbdc/convexity-n-layer-template OR github:wrappedcbdc/convexity-n-layer-template',
+            { default: 'wrappedcbdc/convexity-n-layer-template' }
         )
-        .option('--install', 'Run package manager install after scaffolding', {
-            default: false,
-        })
-        .option('--no-git', 'Do not initialize a git repository', {
-            default: false,
-        })
+        .option('--install', 'Run npm install after scaffolding', { default: false })
+        .option('--no-git', 'Do not initialize a git repository', { default: false })
         .action(async (projectName, options) => {
             try {
                 // 1) Resolve project name (prompt if not provided)
@@ -68,13 +47,13 @@ async function main() {
                             name: 'name',
                             message: 'Project name:',
                             initial: 'my-convexity-app',
-                            validate: (value) => (value && value.trim().length ? true : 'Please enter a project name'),
+                            validate: (value) => (value && value.trim().length ? true : 'Please enter a project name')
                         },
                         {
                             onCancel: () => {
                                 console.log('Aborted.');
                                 process.exit(1);
-                            },
+                            }
                         }
                     );
                     projectName = res.name.trim();
@@ -82,7 +61,7 @@ async function main() {
 
                 const targetDir = path.resolve(process.cwd(), projectName);
 
-                // 2) If target directory exists, confirm overwrite
+                // 2) If target directory exists, confirm overwrite when not empty
                 if (await fs.pathExists(targetDir)) {
                     const files = await fs.readdir(targetDir);
                     if (files.length) {
@@ -91,13 +70,13 @@ async function main() {
                                 type: 'confirm',
                                 name: 'overwrite',
                                 message: `Directory ${projectName} already exists and is not empty. Overwrite?`,
-                                initial: false,
+                                initial: false
                             },
                             {
                                 onCancel: () => {
                                     console.log('Aborted.');
                                     process.exit(1);
-                                },
+                                }
                             }
                         );
                         if (!response.overwrite) {
@@ -111,37 +90,35 @@ async function main() {
                 console.log(`\nCreating project ${projectName}...\n`);
 
                 // 3) Prepare repo spec for degit
-                // Accept forms:
-                // - github:owner/repo
-                // - owner/repo
-                // - owner/repo#branch
-                // Then append /templatePath (unless templatePath === '.')
-                const templatePath = options.template || 'template';
-                let repoBase = (options.repo || '').trim();
+                const templatePath = (options.template || 'template').replace(/^\/+/, '');
+                let repoBase = (options.repo || '').trim().replace(/\/+$/, '');
+                // Normalize: if user passed github:owner/repo, also support a fallback without the prefix
+                const buildSpec = (base) =>
+                    templatePath === '.' ? base : `${base}/${templatePath}`;
 
-                // If user passed owner/repo without `github:` prefix, degit accepts it fine.
-                // Ensure we remove trailing slashes.
-                repoBase = repoBase.replace(/\/+$/, '');
+                let repoSpec = buildSpec(repoBase);
 
-                const repoSpec = templatePath === '.'
-                    ? repoBase
-                    : `${repoBase}/${templatePath.replace(/^\/+/, '')}`;
-
-                // 4) Clone with degit
-                let emitter;
-                try {
-                    emitter = degit(repoSpec, { cache: false, force: true, verbose: false });
-                } catch (err) {
-                    console.error('Failed to create degit emitter. Check your repo/template path.');
-                    throw err;
+                // 4) Clone with degit (with fallback if github: prefix causes trouble)
+                async function tryClone(spec) {
+                    const emitter = degit(spec, { cache: false, force: true, verbose: false });
+                    await emitter.clone(targetDir);
                 }
 
                 try {
-                    await emitter.clone(targetDir);
+                    await tryClone(repoSpec);
                 } catch (err) {
-                    console.error(`Failed to clone template from "${repoSpec}".`);
-                    console.error('Make sure the repo and template path are correct and the repo is public (or accessible).');
-                    throw err;
+                    // Retry without github: if present
+                    if (repoBase.startsWith('github:')) {
+                        const fallbackBase = repoBase.replace(/^github:/, '');
+                        const fallbackSpec = buildSpec(fallbackBase);
+                        console.warn(`Failed to clone from "${repoSpec}". Retrying with "${fallbackSpec}"...`);
+                        await tryClone(fallbackSpec);
+                        repoSpec = fallbackSpec;
+                    } else {
+                        console.error(`Failed to clone template from "${repoSpec}".`);
+                        console.error('Make sure the repo and template path are correct and the repo is public (or accessible).');
+                        throw err;
+                    }
                 }
 
                 // 5) Replace placeholders (e.g., __PROJECT_NAME__, __PROJECT_SLUG__)
@@ -151,20 +128,18 @@ async function main() {
                     const slug = slugify(projectName);
                     pkg = pkg.replace(/__PROJECT_NAME__/g, projectName);
                     pkg = pkg.replace(/__PROJECT_SLUG__/g, slug);
-                    // also replace placeholder in README or other files if desired
                     await fs.writeFile(pkgPath, pkg, 'utf8');
                 }
 
-                // 6) Optionally install dependencies
+                // 6) Optionally install dependencies (npm only)
                 if (options.install) {
-                    const installer = await detectInstaller();
-                    const installArgs = installer === 'yarn' ? [] : ['install'];
-                    console.log(`Installing dependencies with ${installer}...`);
+                    const { execa } = await import('execa');
+                    console.log('Installing dependencies with npm...');
                     try {
-                        await execa(installer, installArgs, { cwd: targetDir, stdio: 'inherit' });
+                        await execa('npm', ['install'], { cwd: targetDir, stdio: 'inherit' });
                         console.log('Dependencies installed.');
                     } catch (err) {
-                        console.error('Package installation failed. You can run the installer manually inside the new project.');
+                        console.error('npm install failed. You can run it manually inside the new project.');
                         throw err;
                     }
                 } else {
@@ -174,9 +149,9 @@ async function main() {
                 // 7) Initialize git unless disabled
                 if (!options.noGit) {
                     try {
+                        const { execa } = await import('execa');
                         await execa('git', ['init'], { cwd: targetDir });
                         await execa('git', ['add', '.'], { cwd: targetDir });
-                        // Try to commit; if git user is not configured it might fail but we continue gracefully
                         try {
                             await execa('git', ['commit', '-m', 'chore: initial commit'], { cwd: targetDir });
                             console.log('Initialized git repository and made initial commit.');
@@ -191,7 +166,9 @@ async function main() {
                 }
 
                 console.log('\nDone!');
-                console.log(`\nNext steps:\n  1) cd ${projectName}\n  2) ${options.install ? '' : 'npm install  (if you skipped installation)\n  '}3) npm run dev  (or your start script)\n`);
+                console.log(
+                    `\nNext steps:\n  1) cd ${projectName}\n  2) ${options.install ? '' : 'npm install  (if you skipped installation)\n  '}3) npm run dev  (or your start script)\n`
+                );
             } catch (err) {
                 console.error('Error:', err?.message || err);
                 process.exit(1);
