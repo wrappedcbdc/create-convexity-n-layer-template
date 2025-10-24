@@ -119,7 +119,7 @@ async function main() {
                 if (await fs.pathExists(pkgPath)) {
                     let pkg = await fs.readFile(pkgPath, 'utf8');
                     const slug = slugify(projectName);
-                    pkg = pkg.replace(/project-name/g, projectName);
+                    pkg = pkg.replace(/convexity-n-layer-template/g, projectName);
                     pkg = pkg.replace(/__PROJECT_SLUG__/g, slug);
                     await fs.writeFile(pkgPath, pkg, 'utf8');
                 }
