@@ -1,10 +1,27 @@
 #!/usr/bin/env node
 
 const path = require('path');
-const fs = require('fs-extra');
-const degit = require('degit');
-const prompts = require('prompts');
-const cac = require('cac');
+
+/**
+ * Resolve a require() result down to its callable export.
+ *
+ * Some dependencies (cac >= 7, degit >= 3) are now published as ESM-only
+ * packages. On Node >= 22.12 `require()` of an ESM package succeeds but hands
+ * back the module namespace object rather than the function, which surfaced as
+ * "TypeError: cac is not a function". Unwrapping default/named exports keeps the
+ * CLI working against either module format.
+ */
+function interop(mod, name) {
+    if (typeof mod === 'function') return mod;
+    if (mod && typeof mod.default === 'function') return mod.default;
+    if (name && mod && typeof mod[name] === 'function') return mod[name];
+    return mod;
+}
+
+const fs = interop(require('fs-extra'));
+const degit = interop(require('degit'), 'degit');
+const prompts = interop(require('prompts'), 'prompts');
+const cac = interop(require('cac'), 'cac');
 
 /**
  * Slugify a project name for package.json name (simple)
@@ -36,7 +53,7 @@ async function main() {
             { default: 'wrappedcbdc/convexity-n-layer-template' }
         )
         .option('--install', 'Run npm install after scaffolding', { default: false })
-        .option('--no-git', 'Do not initialize a git repository', { default: false })
+        .option('--no-git', 'Do not initialize a git repository')
         .action(async (projectName, options) => {
             try {
                 if (!projectName) {
@@ -138,7 +155,7 @@ async function main() {
                     console.log('Skipping dependency install.');
                 }
 
-                if (!options.noGit) {
+                if (options.git !== false) {
                     try {
                         const { execa } = await import('execa');
                         await execa('git', ['init'], { cwd: targetDir });
@@ -167,7 +184,7 @@ async function main() {
         });
 
     cli.help();
-    cli.version('1.0.0');
+    cli.version(require('../package.json').version);
     cli.parse();
 }
 

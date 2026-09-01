@@ -1,6 +1,6 @@
 {
   "name": "create-convexity-n-layer-template",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Scaffold a Convexity N-Layer Node backend project",
   "bin": {
     "create-convexity-n-layer-template": "./bin/index.js"
@@ -17,11 +17,11 @@
   "keywords": ["create", "scaffold", "template", "convexity"],
   "license": "MIT",
   "dependencies": {
-    "degit": "latest",
-    "fs-extra": "latest",
-    "prompts": "latest",
-    "execa": "latest",
-    "cac": "latest"
+    "cac": "^6.7.14",
+    "degit": "^2.8.4",
+    "execa": "^8.0.1",
+    "fs-extra": "^11.2.0",
+    "prompts": "^2.4.2"
   },
   "engines": {
     "node": ">=16"
